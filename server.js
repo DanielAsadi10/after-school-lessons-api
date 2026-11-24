@@ -42,6 +42,31 @@ if (!mongoUri) {
 
 const client = new MongoClient(mongoUri)
 
+app.get('/lessons/search', async (request, response) => {
+  const query = String(request.query.q || '').trim()
+  if (!query) return response.status(400).json({ error: 'Enter a subject or location to search for.' })
+  if (query.length > 100) return response.status(400).json({ error: 'Search text must be 100 characters or fewer.' })
+
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  try {
+    const matchingLessons = await client
+      .db(databaseName)
+      .collection('lessons')
+      .find({
+        $or: [
+          { subject: { $regex: escapedQuery, $options: 'i' } },
+          { location: { $regex: escapedQuery, $options: 'i' } },
+        ],
+      }, { projection: { _id: 0 } })
+      .toArray()
+
+    response.json(matchingLessons)
+  } catch (error) {
+    console.error('Could not search lessons in MongoDB:', error)
+    response.status(500).json({ error: 'Could not search lessons.' })
+  }
+})
+
 app.get('/lessons', async (request, response) => {
   try {
     const lessons = await client
