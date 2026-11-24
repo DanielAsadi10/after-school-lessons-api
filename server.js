@@ -6,8 +6,26 @@ const app = express()
 const port = process.env.PORT || 3000
 const mongoUri = process.env.MONGODB_URI
 const databaseName = process.env.MONGODB_DB || 'after-school'
+const allowedOrigins = new Set([
+  'http://localhost:5173',
+  process.env.FRONTEND_ORIGIN?.replace(/\/$/, ''),
+].filter(Boolean))
 
 app.use(express.json())
+app.use((request, response, next) => {
+  const origin = request.headers.origin
+  if (origin && !allowedOrigins.has(origin)) {
+    return response.status(403).json({ error: 'This website is not allowed to access the API.' })
+  }
+  if (origin) {
+    response.setHeader('Access-Control-Allow-Origin', origin)
+    response.setHeader('Vary', 'Origin')
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  }
+  if (request.method === 'OPTIONS') return response.sendStatus(204)
+  next()
+})
 app.use((request, response, next) => {
   console.log(`${new Date().toISOString()} ${request.method} ${request.url}`)
   next()
