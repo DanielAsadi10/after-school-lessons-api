@@ -14,7 +14,7 @@ The seed command adds missing sample lessons, updates their icons and teacher as
 ## Routes
 
 - `GET /lessons` returns the lessons.
-- `GET /lessons/search?q=...` searches lesson subject and location, and exact numeric prices and spaces.
+- `GET /lessons/search?q=...` searches lesson subject and location, and matches numeric prices and spaces by text.
 - `PUT /lessons/:id` updates a lesson.
 - `POST /orders` saves an order.
 - `GET /teachers` lists teachers and their class counts.

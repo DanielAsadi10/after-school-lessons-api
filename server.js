@@ -11,6 +11,10 @@ const allowedOrigins = new Set([
   process.env.FRONTEND_ORIGIN?.replace(/\/$/, ''),
 ].filter(Boolean))
 
+app.use((request, response, next) => {
+  console.log(`${new Date().toISOString()} ${request.method} ${request.url}`)
+  next()
+})
 app.use(express.json())
 app.use((request, response, next) => {
   const origin = request.headers.origin
@@ -24,10 +28,6 @@ app.use((request, response, next) => {
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   }
   if (request.method === 'OPTIONS') return response.sendStatus(204)
-  next()
-})
-app.use((request, response, next) => {
-  console.log(`${new Date().toISOString()} ${request.method} ${request.url}`)
   next()
 })
 
@@ -112,21 +112,32 @@ app.get('/lessons/search', async (request, response) => {
   if (query.length > 100) return response.status(400).json({ error: 'Search text must be 100 characters or fewer.' })
 
   const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const searchNumber = Number(query)
-  const searchableFields = [
-    { subject: { $regex: escapedQuery, $options: 'i' } },
-    { location: { $regex: escapedQuery, $options: 'i' } },
-  ]
-  if (Number.isFinite(searchNumber)) {
-    searchableFields.push({ price: searchNumber }, { spaces: searchNumber })
-  }
+  const numericFieldMatches = (field) => ({
+    $expr: {
+      $regexMatch: {
+        input: { $ifNull: [{ $toString: `$${field}` }, ''] },
+        regex: escapedQuery,
+        options: 'i',
+      },
+    },
+  })
   try {
     const matchingLessons = await client
       .db(databaseName)
       .collection('lessons')
-      .find({
-        $or: searchableFields,
-      }, { projection: { _id: 0 } })
+      .aggregate([
+        {
+          $match: {
+            $or: [
+              { subject: { $regex: escapedQuery, $options: 'i' } },
+              { location: { $regex: escapedQuery, $options: 'i' } },
+              numericFieldMatches('price'),
+              numericFieldMatches('spaces'),
+            ],
+          },
+        },
+        { $project: { _id: 0 } },
+      ])
       .toArray()
 
     response.json(matchingLessons)
@@ -180,8 +191,16 @@ app.put('/lessons/:id', async (request, response) => {
 
 app.post('/orders', async (request, response) => {
   const { name, phone, lessons: orderedLessons, total } = request.body || {}
-  if (typeof name !== 'string' || !name.trim() || typeof phone !== 'string' || !phone.trim()) {
+  const normalizedName = typeof name === 'string' ? name.trim() : ''
+  const normalizedPhone = typeof phone === 'string' ? phone.trim() : ''
+  if (!normalizedName || !normalizedPhone) {
     return response.status(400).json({ error: 'A name and phone number are required.' })
+  }
+  if (!/^[A-Za-z ]{2,}$/.test(normalizedName) || !/[A-Za-z]/.test(normalizedName)) {
+    return response.status(400).json({ error: 'Name must contain letters and spaces only.' })
+  }
+  if (!/^\d{7,20}$/.test(normalizedPhone)) {
+    return response.status(400).json({ error: 'Phone number must contain 7 to 20 digits only.' })
   }
   if (!Array.isArray(orderedLessons) || orderedLessons.length === 0) {
     return response.status(400).json({ error: 'An order must contain at least one lesson.' })
@@ -189,8 +208,8 @@ app.post('/orders', async (request, response) => {
 
   try {
     const order = {
-      name: name.trim(),
-      phone: phone.trim(),
+      name: normalizedName,
+      phone: normalizedPhone,
       lessons: orderedLessons,
       total: Number(total) || 0,
       createdAt: new Date(),
