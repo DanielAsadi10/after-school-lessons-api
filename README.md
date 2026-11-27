@@ -13,6 +13,7 @@ The seed command adds missing sample lessons, updates their icons and teacher as
 
 ## Routes
 
+- `GET /images/<filename>` serves an image from `public/images`; unknown files return a JSON 404 error.
 - `GET /lessons` returns the lessons.
 - `GET /lessons/search?q=...` searches lesson subject and location, and matches numeric prices and spaces by text.
 - `PUT /lessons/:id` updates a lesson.
@@ -20,3 +21,4 @@ The seed command adds missing sample lessons, updates their icons and teacher as
 - `GET /teachers` lists teachers and their class counts.
 - `GET /teachers/:teacherId/lessons` returns a teacher's classes.
 - `GET /teachers/:teacherId/enrolment` returns the total number of booked spaces across that teacher's classes, calculated from saved orders.
+- `GET /enrolment/:lessonId` returns the number of purchased places for one lesson, calculated from saved orders.

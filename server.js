@@ -1,11 +1,13 @@
 import 'dotenv/config'
 import express from 'express'
 import { MongoClient } from 'mongodb'
+import { fileURLToPath } from 'node:url'
 
 const app = express()
 const port = process.env.PORT || 3000
 const mongoUri = process.env.MONGODB_URI
 const databaseName = process.env.MONGODB_DB || 'after-school'
+const imageDirectory = fileURLToPath(new URL('./public/images/', import.meta.url))
 const allowedOrigins = new Set([
   'http://localhost:5173',
   process.env.FRONTEND_ORIGIN?.replace(/\/$/, ''),
@@ -32,6 +34,11 @@ app.use((request, response, next) => {
   }
   if (request.method === 'OPTIONS') return response.sendStatus(204)
   next()
+})
+// Serve lesson image assets and return a clear 404 response for missing files.
+app.use('/images', express.static(imageDirectory))
+app.use('/images', (request, response) => {
+  response.status(404).json({ error: 'Lesson image not found.' })
 })
 
 // Provide a simple health check for the deployed API.
@@ -110,6 +117,32 @@ app.get('/teachers/:teacherId/enrolment', async (request, response) => {
   } catch (error) {
     console.error('Could not calculate teacher enrolment from MongoDB:', error)
     response.status(500).json({ error: 'Could not calculate teacher enrolment.' })
+  }
+})
+
+// Count purchased places for one lesson using the quantities stored in orders.
+app.get('/enrolment/:lessonId', async (request, response) => {
+  const lessonId = Number(request.params.lessonId)
+  if (!Number.isInteger(lessonId)) return response.status(400).json({ error: 'Provide a valid lesson id.' })
+
+  try {
+    const database = client.db(databaseName)
+    const lesson = await database.collection('lessons').findOne(
+      { id: lessonId },
+      { projection: { _id: 0, id: 1, subject: 1 } },
+    )
+    if (!lesson) return response.status(404).json({ error: 'Lesson not found.' })
+
+    const [result] = await database.collection('orders').aggregate([
+      { $unwind: '$lessons' },
+      { $match: { 'lessons.id': lessonId } },
+      { $group: { _id: null, enrolment: { $sum: { $ifNull: ['$lessons.quantity', 1] } } } },
+    ]).toArray()
+
+    response.json({ lessonId, subject: lesson.subject, enrolment: result?.enrolment || 0 })
+  } catch (error) {
+    console.error('Could not calculate lesson enrolment from MongoDB:', error)
+    response.status(500).json({ error: 'Could not calculate lesson enrolment.' })
   }
 })
 

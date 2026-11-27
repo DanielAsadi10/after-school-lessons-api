@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" role="img" aria-labelledby="title description">
+  <title id="title">Coding class</title>
+  <desc id="description">A laptop displaying code on a desk</desc>
+  <rect width="800" height="450" rx="28" fill="#eef1ff" />
+  <circle cx="655" cy="105" r="52" fill="#d8defe" />
+  <rect x="188" y="95" width="424" height="250" rx="18" fill="#202944" />
+  <rect x="211" y="119" width="378" height="201" rx="8" fill="#fff" />
+  <circle cx="233" cy="140" r="6" fill="#5968ce" />
+  <circle cx="254" cy="140" r="6" fill="#f5a34b" />
+  <circle cx="275" cy="140" r="6" fill="#65b98a" />
+  <path d="M260 188h117M260 220h192M260 252h144" stroke="#5968ce" stroke-linecap="round" stroke-width="12" />
+  <path d="M168 351h464l-36 39H204z" fill="#5968ce" />
+  <path d="M345 351h110l-13 16h-84z" fill="#eef1ff" />
+</svg>
