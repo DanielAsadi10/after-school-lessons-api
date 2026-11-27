@@ -4,6 +4,7 @@ import { MongoClient } from 'mongodb'
 const mongoUri = process.env.MONGODB_URI
 const databaseName = process.env.MONGODB_DB || 'after-school'
 
+// Starter catalogue data; upserts below add missing lessons without resetting stock.
 const lessons = [
   { id: 1, subject: 'Python for Beginners', location: 'Hendon', price: 45, spaces: 5, icon: 'fa-solid fa-code', teacherId: 1 },
   { id: 2, subject: 'Build Your First Website', location: 'Colindale', price: 50, spaces: 5, icon: 'fa-solid fa-globe', teacherId: 2 },
@@ -17,6 +18,7 @@ const lessons = [
   { id: 10, subject: 'AI and Machine Learning Basics', location: 'Colindale', price: 70, spaces: 5, icon: 'fa-solid fa-brain', teacherId: 2 },
 ]
 
+// Sample teachers referenced by each lesson's teacherId.
 const teachers = [
   { id: 1, firstName: 'Amira', lastName: 'Khan' },
   { id: 2, firstName: 'Daniel', lastName: 'Reed' },
@@ -31,6 +33,7 @@ if (!mongoUri) {
 
 const client = new MongoClient(mongoUri)
 
+// Connect to Atlas and insert or refresh the starter lesson and teacher records.
 try {
   await client.connect()
   const collection = client.db(databaseName).collection('lessons')

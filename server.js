@@ -11,11 +11,14 @@ const allowedOrigins = new Set([
   process.env.FRONTEND_ORIGIN?.replace(/\/$/, ''),
 ].filter(Boolean))
 
+// Log each request so API activity and failures are easier to trace in Render.
 app.use((request, response, next) => {
   console.log(`${new Date().toISOString()} ${request.method} ${request.url}`)
   next()
 })
+// Parse JSON request bodies before route handlers read them.
 app.use(express.json())
+// Allow the local and configured frontend origins to call this API.
 app.use((request, response, next) => {
   const origin = request.headers.origin
   if (origin && !allowedOrigins.has(origin)) {
@@ -31,6 +34,7 @@ app.use((request, response, next) => {
   next()
 })
 
+// Provide a simple health check for the deployed API.
 app.get('/', (request, response) => {
   response.send('After school classes API is running.')
 })
@@ -42,6 +46,7 @@ if (!mongoUri) {
 
 const client = new MongoClient(mongoUri)
 
+// Return teachers with a count of the lessons assigned to each one.
 app.get('/teachers', async (request, response) => {
   try {
     const database = client.db(databaseName)
@@ -63,6 +68,7 @@ app.get('/teachers', async (request, response) => {
   }
 })
 
+// Return all lessons assigned to one teacher after validating their id.
 app.get('/teachers/:teacherId/lessons', async (request, response) => {
   const teacherId = Number(request.params.teacherId)
   if (!Number.isInteger(teacherId)) return response.status(400).json({ error: 'Provide a valid teacher id.' })
@@ -82,6 +88,7 @@ app.get('/teachers/:teacherId/lessons', async (request, response) => {
   }
 })
 
+// Count ordered lesson places belonging to a teacher and include their profile.
 app.get('/teachers/:teacherId/enrolment', async (request, response) => {
   const teacherId = Number(request.params.teacherId)
   if (!Number.isInteger(teacherId)) return response.status(400).json({ error: 'Provide a valid teacher id.' })
@@ -106,12 +113,14 @@ app.get('/teachers/:teacherId/enrolment', async (request, response) => {
   }
 })
 
+// Search lesson text and numeric fields using a safely escaped query.
 app.get('/lessons/search', async (request, response) => {
   const query = String(request.query.q || '').trim()
   if (!query) return response.status(400).json({ error: 'Enter a subject or location to search for.' })
   if (query.length > 100) return response.status(400).json({ error: 'Search text must be 100 characters or fewer.' })
 
   const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // Build a MongoDB expression that lets text searches match numeric values.
   const numericFieldMatches = (field) => ({
     $expr: {
       $regexMatch: {
@@ -147,6 +156,7 @@ app.get('/lessons/search', async (request, response) => {
   }
 })
 
+// Return every lesson for the class catalogue.
 app.get('/lessons', async (request, response) => {
   try {
     const lessons = await client
@@ -162,6 +172,7 @@ app.get('/lessons', async (request, response) => {
   }
 })
 
+// Update allowed lesson fields, including remaining spaces after checkout.
 app.put('/lessons/:id', async (request, response) => {
   const id = Number(request.params.id)
   const allowedFields = ['subject', 'location', 'price', 'spaces', 'icon', 'teacherId']
@@ -189,6 +200,7 @@ app.put('/lessons/:id', async (request, response) => {
   }
 })
 
+// Validate customer details and save a completed order in MongoDB.
 app.post('/orders', async (request, response) => {
   const { name, phone, lessons: orderedLessons, total } = request.body || {}
   const normalizedName = typeof name === 'string' ? name.trim() : ''
