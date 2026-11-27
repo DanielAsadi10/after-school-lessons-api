@@ -42,21 +42,90 @@ if (!mongoUri) {
 
 const client = new MongoClient(mongoUri)
 
+app.get('/teachers', async (request, response) => {
+  try {
+    const database = client.db(databaseName)
+    const [teachers, lessons] = await Promise.all([
+      database.collection('teachers').find({}, { projection: { _id: 0 } }).sort({ lastName: 1, firstName: 1 }).toArray(),
+      database.collection('lessons').find({}, { projection: { _id: 0, id: 1, teacherId: 1 } }).toArray(),
+    ])
+    const lessonCounts = new Map()
+    for (const lesson of lessons) {
+      lessonCounts.set(lesson.teacherId, (lessonCounts.get(lesson.teacherId) || 0) + 1)
+    }
+    response.json(teachers.map((teacher) => ({
+      ...teacher,
+      lessonCount: lessonCounts.get(teacher.id) || 0,
+    })))
+  } catch (error) {
+    console.error('Could not retrieve teachers from MongoDB:', error)
+    response.status(500).json({ error: 'Could not retrieve teachers.' })
+  }
+})
+
+app.get('/teachers/:teacherId/lessons', async (request, response) => {
+  const teacherId = Number(request.params.teacherId)
+  if (!Number.isInteger(teacherId)) return response.status(400).json({ error: 'Provide a valid teacher id.' })
+
+  try {
+    const database = client.db(databaseName)
+    const teacher = await database.collection('teachers').findOne({ id: teacherId }, { projection: { _id: 0 } })
+    if (!teacher) return response.status(404).json({ error: 'Teacher not found.' })
+
+    const lessons = await database.collection('lessons')
+      .find({ teacherId }, { projection: { _id: 0 } })
+      .toArray()
+    response.json(lessons)
+  } catch (error) {
+    console.error('Could not retrieve a teacher’s lessons from MongoDB:', error)
+    response.status(500).json({ error: 'Could not retrieve lessons for this teacher.' })
+  }
+})
+
+app.get('/teachers/:teacherId/enrolment', async (request, response) => {
+  const teacherId = Number(request.params.teacherId)
+  if (!Number.isInteger(teacherId)) return response.status(400).json({ error: 'Provide a valid teacher id.' })
+
+  try {
+    const database = client.db(databaseName)
+    const teacher = await database.collection('teachers').findOne({ id: teacherId }, { projection: { _id: 0 } })
+    if (!teacher) return response.status(404).json({ error: 'Teacher not found.' })
+
+    const lessonIds = await database.collection('lessons')
+      .distinct('id', { teacherId })
+    const [enrolment] = await database.collection('orders').aggregate([
+      { $unwind: '$lessons' },
+      { $match: { 'lessons.id': { $in: lessonIds } } },
+      { $group: { _id: null, count: { $sum: { $ifNull: ['$lessons.quantity', 1] } } } },
+    ]).toArray()
+
+    response.json({ teacher, enrolment: enrolment?.count || 0 })
+  } catch (error) {
+    console.error('Could not calculate teacher enrolment from MongoDB:', error)
+    response.status(500).json({ error: 'Could not calculate teacher enrolment.' })
+  }
+})
+
 app.get('/lessons/search', async (request, response) => {
   const query = String(request.query.q || '').trim()
   if (!query) return response.status(400).json({ error: 'Enter a subject or location to search for.' })
   if (query.length > 100) return response.status(400).json({ error: 'Search text must be 100 characters or fewer.' })
 
   const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const searchNumber = Number(query)
+  const searchableFields = [
+    { subject: { $regex: escapedQuery, $options: 'i' } },
+    { location: { $regex: escapedQuery, $options: 'i' } },
+  ]
+  if (Number.isFinite(searchNumber)) {
+    searchableFields.push({ price: searchNumber }, { spaces: searchNumber })
+  }
   try {
     const matchingLessons = await client
       .db(databaseName)
       .collection('lessons')
       .find({
-        $or: [
-          { subject: { $regex: escapedQuery, $options: 'i' } },
-          { location: { $regex: escapedQuery, $options: 'i' } },
-        ],
+        $or: searchableFields,
       }, { projection: { _id: 0 } })
       .toArray()
 
@@ -84,7 +153,7 @@ app.get('/lessons', async (request, response) => {
 
 app.put('/lessons/:id', async (request, response) => {
   const id = Number(request.params.id)
-  const allowedFields = ['subject', 'location', 'price', 'spaces', 'icon']
+  const allowedFields = ['subject', 'location', 'price', 'spaces', 'icon', 'teacherId']
   const updates = Object.fromEntries(
     Object.entries(request.body || {}).filter(([field]) => allowedFields.includes(field)),
   )
